@@ -110,7 +110,7 @@ def paarti_mag_to_flux(act_start, act_stop, act_step,
                                                           pix_per_ap=lgs_pixpsa, 
                                                           time=int_time, 
                                                           m = lgs_mag)
-        tt_flux = maos_utils.keck_nea_photons(m=tt_mag, wfs="STRAP", wfs_int_time=int_time)
+        tt_flux = maos_utils.keck_nea_photons(m=tt_mag, wfs="TRICK-H", wfs_int_time=int_time)
         truth_flux = maos_utils.keck_nea_photons_any_config(wfs = 'LBWFS',
                                                             side = 0.563,
                                                             throughput=0.03,
