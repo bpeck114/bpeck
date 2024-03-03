@@ -34,6 +34,8 @@ TT_INTEGRATION        = 1/1500
 LBWFS_WFS             = 'LBWFS'
 LBWFS_INTEGRATION     = 1000000 / 1500 #Needs to happen infrequently
 
+#Output directory for psf metrics and WFE
+OUTPUT_DIRECTORY = '/u/bpeck/work/mcao/experiments/act_study/vismcao/A_keck_mcao_lgs'
 
 
 def calc_side(act_start, act_stop, act_step, sigfigs=3):
@@ -241,48 +243,117 @@ def print_mag_to_flux(act_start, act_stop, act_step,
     
     return
 
-def psf_metrics_x0y0(directory='./', oversamp=3, seed=10, cut_radius=20):
-    """
-    Copied from PAARTI, just doesn't print message.
-    Print some PSF metrics for a central PSF computed by MAOS
-    at an arbitrary number of wavelengths.
-    """
-    print("Looking in directory:", directory)  
-    fits_files = glob.glob(directory + f'evlpsfcl_{seed}_x0_y0.fits')
-    
-    psf_all_wvls = fits.open(fits_files[0])
- 
-    nwvl = len(psf_all_wvls)
+def calc_psf_metrics(act_start, act_stop, act_step, lgs_mag):
+    actuators = np.arange(act_start, act_stop, act_step)
+    psf_metrics = []
 
-    wavelengths = np.zeros(nwvl)
-    strehl_values = np.zeros(nwvl)
-    fwhm_gaus_values = np.zeros(nwvl)
-    fwhm_emp_values = np.zeros(nwvl)
-    r_ee80_values = np.zeros(nwvl)
- 
-    print(f'{"Wavelength":10s} {"Strehl":>6s} {"FWHM_gaus":>10s} {"FWHM_emp":>10s} {"r_EE80":>6s}')
-    print(f'{"(microns)":10s} {"":>6s} {"(mas)":>10s} {"(mas)":>10s} {"(mas)":>6s}')
-    
-    for pp in range(nwvl):
-        psf = psf_all_wvls[pp].data
-        hdr = psf_all_wvls[pp].header
-        mets = metrics.calc_psf_metrics_single(psf, hdr['DP'], oversamp=oversamp)
-        wavelengths[pp] = hdr["WVL"] * 1e6
-        strehl_values[pp] = mets["strehl"]
-        fwhm_gaus_values[pp] = mets["emp_fwhm"] * 1e3
-        fwhm_emp_values[pp] = mets["fwhm"] * 1e3
-        r_ee80_values[pp] = mets["ee80"] * 1e3
+    for act in actuators:
+        home_directory = os.path.expanduser('~')
+        os.chdir(home_directory)
 
-        sout  = f'{hdr["WVL"]*1e6:10.3f} '
-        sout += f'{mets["strehl"]:6.2f} '
-        sout += f'{mets["emp_fwhm"]*1e3:10.1f} ' 
-        sout += f'{mets["fwhm"]*1e3:10.1f} ' 
-        sout += f'{mets["ee80"]*1e3:6.1f}' 
-        #print(sout)
+        main_output_directory = OUTPUT_DIRECTORY
+        os.chdir(main_output_directory)
 
-    psf_all_wvls.close()
- 
-    return wavelengths, strehl_values, fwhm_gaus_values, fwhm_emp_values, r_ee80_values                                    
+        cwd1 = os.getcwd()
+        print('Current Working Directory:', cwd1)
+
+        output_directory = f"{lgs_mag}mag/{act}act"
+        os.chdir(output_directory)
+
+        cwd2 = os.getcwd()
+        print(cwd2)
+
+        psf_metrics.append(maos_utils.print_psf_metrics_x0y0(oversamp=3, seed=1))
+
+    return psf_metrics
+
+def calc_wfe(act_start, act_stop, act_step, lgs_mag):
+    actuators = np.arange(act_start, act_stop, act_step)
+    wfe_metrics = []
+
+    for act in actuators:
+        home_directory = os.path.expanduser('~')
+        os.chdir(home_directory)
+
+        main_output_directory = OUTPUT_DIRECTORY
+        os.chdir(main_output_directory)
+
+        cwd1 = os.getcwd()
+        print('Current Working Directory:', cwd1)
+
+        output_directory = f"{lgs_mag}mag/{act}act"
+        os.chdir(output_directory)
+
+        cwd2 = os.getcwd()
+        print(cwd2)
+
+        wfe_metrics.append(maos_utils.print_wfe_metrics( seed=1))
+
+    return wfe_metrics
+
+def extract_closed_wfe(act_start, act_stop, act_step, lgs_mag, position):
+    wfe_metrics = calc_wfe(act_start, act_stop, act_step, lgs_mag)
+    closed_loop_results = [result[3][position] for result in wfe_metrics]
+    return closed_loop_results
+
+def extract_total_wfe(act_start, act_stop, act_step, lgs_mag, position):
+    closed_loop_results = extract_closed_wfe(act_start, act_stop, act_step, lgs_mag, position)
+    total_wfe  = [result[0] for result in closed_loop_results]
+    return total_wfe
+
+def extract_ho_wfe(act_start, act_stop, act_step, lgs_mag, position):
+    closed_loop_results = extract_closed_wfe(act_start, act_stop, act_step, lgs_mag, position)
+    ho_wfe  = [result[2] for result in closed_loop_results]
+    return ho_wfe
+
+def extract_tt_wfe(act_start, act_stop, act_step, lgs_mag, position):
+    closed_loop_results = extract_closed_wfe(act_start, act_stop, act_step, lgs_mag, position)
+    tt_wfe  = [result[1] for result in closed_loop_results]
+    return tt_wfe
+
+def plot_closed_wfe(act_start, act_stop, act_step, lgs_mag, position):
+    actuators = np.arange(act_start, act_stop, act_step)
+    total_wfe = extract_total_wfe(act_start, act_stop, act_step, lgs_mag, position)
+    ho_wfe = extract_ho_wfe(act_start, act_stop, act_step, lgs_mag, position)
+    tt_wfe = extract_tt_wfe(act_start, act_stop, act_step, lgs_mag, position)
+
+    plt.plot(actuators, total_wfe, color = 'red', label = "Total WFE")
+    plt.plot(actuators, ho_wfe, color = 'blue', label = "High-Order WFE")
+    plt.plot(actuators, tt_wfe, color = 'green', label = "TT WFE")
+
+    plt.title(f"WFE vs. Actuator Count ({lgs_mag} LGS mag)")
+    plt.xlabel("Actuator Count")
+    plt.ylabel("WFE")
+    plt.legend()
+    plt.show()
+
+    '''
+    figure, axis = plt.subplots(nrows=1, ncols=3, figsize=(16,4), sharey=True)
+
+    axis[0].plot(actuators, total_wfe, color = 'red', label = "Total WFE")
+    axis[1].plot(actuators, ho_wfe, color = 'blue', label = "High-Order WFE")
+    axis[2].plot(actuators, tt_wfe, color = 'green', label = "TT WFE")
+
+    for ax in axis:
+        ax.set_xlabel("Actuator Count on ASM (n)")
+
+    axis[0].set_ylabel("Total Wave-front Error (nm)")
+    axis[1].set_ylabel("Tip-Tilt Wave-front Error (nm)")
+    axis[2].set_ylabel("High-Order Wave-front Error (nm)")
+
+    axis[0].tick_params(left=True, labelleft=True)
+    axis[1].tick_params(left=True, labelleft=True)
+    axis[2].tick_params(left=True, labelleft=True)
+
+    axis[0].set_title("Total WFE vs. Actuator Count")
+    axis[1].set_title("Tip-Tilt WFE vs. Actuator Count")
+    axis[2].set_title("High-Order WFE vs. Actuator Count")
+
+    axis[1].legend(bbox_to_anchor=(0.5, -0.15), loc="upper center", ncol=4)
+    plt.savefig('act_study_wfe.png')
+    plt.show()
+    '''
+        
 
 def plot_psf_wvls(act_start, act_stop, act_step, mag, directory_results_path='A_keck_scao_lgs'):
     '''
