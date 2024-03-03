@@ -9,64 +9,74 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from paarti.utils import maos_utils
 
-def run_sims(act_start, act_stop, act_step, mag):
-    actuators = np.arange(act_start, act_stop, act_step)
+"""
+Constants for VisAO (Last Updated: 3/3/2024)
+Refer to PAARTI for further documentation
+"""
+#LGS WFS PAARTI Constants
+LGS_WFS               = 'LGSWFS-OCAM2K'             #Wave Front Sensor
+LGS_THROUGHPUT        = 0.36 * 0.88                 #Throughput (w QE)
+LGS_PIXEL_SIZE        = 1                           #Plate Scale (w QE)
+LGS_THETA_BETA        = 1.5 *(math.pi/180)/(60*60)  #Spot Size Diameter
+LGS_BAND              = 'R'                         #Filter
+LGS_SIGMA_E           = 0.5                         #Read Noise
+LGS_PIXPERSA          = 25                          #Pixels Per Subaperture
+LGS_INTEGRATION       = 1/1500                      #Integration Time
 
-    for actuator in actuators:
-        home_directory = os.path.expanduser('~')
-        os.chdir(home_directory)
+#LGS WFS MAOS Constants 
+LGS_BKGRND            = 0.1 #powfs.bkgrnd
 
-        working_directory = '/u/bpeck/work/mcao/experiments/act_study/vismcao'
-        os.chdir(working_directory)
+#TT WFS PAARTI Constants
+TT_WFS                = 'TRICK-H'
+TT_INTEGRATION        = 1/1500
 
-        cwd = os.getcwd()
-        print('Current Working Directory:', cwd)
-        
-        master_file = f"A_keck_scao_lgs_{mag}mag_{actuator}a.conf"
-        print(master_file)
+#LBWFS Constants
+LBWFS_WFS             = 'LBWFS'
+LBWFS_INTEGRATION     = 1000000 / 1500 #Needs to happen infrequently
 
-        output_folder = f"A_keck_scao_lgs/{mag}mag/{actuator}a"
-        print(output_folder)
-        
-        maos_command = ["maos", "-o", "A_keck_scao_lgs", "-c", master_file, "plot.all=1", "plot.setup=1", "-O"]
-        subprocess.run(maos_command)
 
-        
 
-def calculate_side(act_start, act_stop, act_step, sigfigs=3):
+def calc_side(act_start, act_stop, act_step, sigfigs=3):
     '''
-    - Calculate the distance (in meters) between actuators 
-        on the primary mirror.
-    - Known as the parameter dm.dx in MAOS.
-    - Paramter is needed for flux conversions in PAARTI 
-        (keck_nea_photons_any_config under maos_utils)
+    Calculate the distance (in meters) between actuators 
+    on the primary mirror for Keck. Known as dm.dx in MAOS, needed for 
+    updated keck_nea_photons_any_config. Assumes 11 meter diameter
+    telescope. 
+
+    Inputs:
+    -------
+        act_start(float): Least number of actuators
+        act_stop(float) : Most number of actuators, exclusive
+        act_step(float) : Steps between each calculation
+        sigfigs(float)  : Number of sigfigs to be included (optional)
+    Outputs:
+    --------
+        sides(list)     : Calculated dm.dx value
+        actuators(lists): Associated actuator values
     '''
-    
-    sides = []
-    actuators = []
-    
-    amount_actuators = np.arange(act_start, act_stop, act_step)
 
-    ####
-    # Loops over list of actuators (2000, 3000, 4000, 5000) and 
-    # calculates side value. Appends to a new list.
-    ####
-    for i, actuator_count in enumerate(amount_actuators, start=1):
-        side = 11 / (2 *((actuator_count/np.pi)**0.5))
-        rounded_side = np.round(side, sigfigs)
-
-        sides.append(rounded_side)
-        actuators.append(actuator_count)
-
+    sides = [np.round(11 / (2 *((actuator_count/np.pi)**0.5)), sigfigs)
+             for actuator_count in np.arange(act_start, act_stop, act_step)]
+    actuators = list(np.arange(act_start, act_stop, act_step))
     return sides, actuators
 
-def print_side (act_start, act_stop, act_step, sigfigs=3):
+def print_calc_side(act_start, act_stop, act_step, sigfigs=3):
     '''
-    - Prints the distance (in meters) between actuators 
-        on the primary mirror.
+    Prints the distance (in meters) between actuators 
+    on the primary mirror.
+    Inputs:
+    -------
+        act_start(float): Least number of actuators
+        act_stop(float) : Most number of actuators, exclusive
+        act_step(float) : Steps between each calculation
+        sigfigs(float)  : Number of sigfigs to be included (default = 3)
+    Outputs:
+    --------
+        sides(list)     : Calculated dm.dx value
+        actuators(lists): Associated actuator values
     '''
 
-    sides, actuators = calculate_side(act_start, act_stop, 
+    sides, actuators = calc_side(act_start, act_stop, 
                                       act_step, sigfigs=sigfigs)
 
     print('--------------------')
@@ -76,121 +86,151 @@ def print_side (act_start, act_stop, act_step, sigfigs=3):
     for side_value, actuator_value in zip(sides, actuators):
         print(f'{actuator_value:11.0f} {side_value:11.3f} \n')
 
-    return
+    return sides, actuators
 
 def paarti_mag_to_flux(act_start, act_stop, act_step, 
-                                lgs_mag, tt_mag, lgs_bkgrnd_value =0.1, lgs_pixpsa=25, 
-                                lgs_pixsize=1, int_time=1/1500):
+                       lgs_mag, tt_mag):
     '''
-    - Convert magnitude values for laser guide star and natural 
-        guide start to flux values that MAOS will understand.
-    - From PAARTI, use keck_nea_photons_any_config for LGS and 
-        LBWFS while keck_nea_photons for tt
-    - Works with powfs.siglev, powfs.bkgrnd and powfs.nearecon
-    '''
-
-    lgs = []
-    truth = []
-    tt = []
-
-    sides, actuators = calculate_side(act_start, act_stop, act_step)
-                                    
-    ####
-    # For each dm.dx value and actuator count, calulates magnitude to flux values
-    # with PAARTI package.
-    ####
-
-    for side_value, actuator_value in zip(sides, actuators):
-        lgs_flux = maos_utils.keck_nea_photons_any_config(wfs='LGSWFS-OCAM2K', 
-                                                          side = side_value, 
-                                                          throughput = 0.36 * 0.88, 
-                                                          ps = lgs_pixsize, 
-                                                          theta_beta = 1.5 *(math.pi/180)/(60*60), 
-                                                          band = "R", sigma_e=0.5, 
-                                                          pix_per_ap=lgs_pixpsa, 
-                                                          time=int_time, 
-                                                          m = lgs_mag)
-        tt_flux = maos_utils.keck_nea_photons(m=tt_mag, wfs="TRICK-H", wfs_int_time=int_time)
-        truth_flux = maos_utils.keck_nea_photons_any_config(wfs = 'LBWFS',
-                                                            side = 0.563,
-                                                            throughput=0.03,
-                                                            ps = 1.5,
-                                                            theta_beta = 0.49 * (math.pi/180)/(60*60),
-                                                            band = "R",
-                                                            sigma_e = 7.96,
-                                                            pix_per_ap = 4,
-                                                            time = 1000000/1500,
-                                                            m = tt_mag)
-        
-        lgs.append(lgs_flux)
-        tt.append(tt_flux)
-        truth.append(truth_flux)
-                                                                
-    return lgs, tt, truth, actuators, sides
-
-def calculate_magnitude_to_flux(act_start, act_stop, act_step, 
-                                lgs_mag, tt_mag, lgs_bkgrnd_value =0.1, lgs_pixpsa=25, 
-                                lgs_pixsize=1, int_time=1/1500):
+    Calls upon wrapper package PAARTI to convert
+    magnitude of laser guide stars and tip tilt guide stars to
+    a flux value that MAOS accepts. 
     
+    Inputs:
+    -------
+        act_start(float)          : Least number of actuators
+        act_stop(float)           : Most number of actuators, exclusive
+        act_step(float)           : Steps between each calculation
+        lgs_mag(float)            : Magnitude of laser guide stars
+        tt_mag(float)             : Magnitude of tip-tilt guide stars
+    Outputs:
+    --------
+        lgs(list)                 : Laser Guide Star PAARTI FLux Values 
+        tt(list)                  : Tip-Tilt Star PAARTI Flux Values
+        truth(list)               : Low-bandwidth PAARTI Flux Values
+        sides(list)               : Calculated dm.dx value
+        actuators(list)           : Associated actuator values
     '''
-    - Prints flux values for laser guide star and natural 
-        from magnitude inputs. 
+    sides, actuators = calc_side(act_start, act_stop, act_step)
+    lgs_flux_values = [maos_utils.keck_nea_photons_any_config(wfs=LGS_WFS, 
+                                              side=side_value, 
+                                              throughput=LGS_THROUGHPUT, 
+                                              ps=LGS_PIXEL_SIZE, 
+                                              theta_beta=LGS_THETA_BETA, 
+                                              band=LGS_BAND, 
+                                              sigma_e=LGS_SIGMA_E, 
+                                              pix_per_ap=LGS_PIXPERSA, 
+                                              time=LGS_INTEGRATION, 
+                                              m=lgs_mag)
+           for side_value in sides]
+
+    tt_flux_values = [maos_utils.keck_nea_photons(m=tt_mag,
+                                      wfs=TT_WFS,
+                                      wfs_int_time=TT_INTEGRATION)
+          for _ in sides]
+
+    truth_flux_values = [maos_utils.keck_nea_photons(m=tt_mag,
+                                        wfs=LBWFS_WFS,
+                                        wfs_int_time=LBWFS_INTEGRATION)
+             for _ in sides]
+
+    return lgs_flux_values, tt_flux_values, truth_flux_values, actuators, sides
+                      
+                           
+def maos_mag_to_flux(act_start, act_stop, act_step,
+                     lgs_mag, tt_mag):
     '''
+    Takes PAARTI flux values and converts them to parameters
+    that can be called upon in MAOS: powfs.siglev,
+    powfs.bkgrnd and powfs.nearecon.
     
-    lgs_siglev = []
-    lgs_bkgrnd = []
-    lgs_nearecon = []
+    Inputs:
+    -------
+        act_start(float)          : Least number of actuators
+        act_stop(float)           : Most number of actuators, exclusive
+        act_step(float)           : Steps between each calculation
+        lgs_mag(float)            : Magnitude of laser guide stars
+        tt_mag(float)             : Magnitude of tip-tilt guide stars
+    Outputs
+    --------
+        lgs_siglev(list)          : Laser Guide Star powfs.siglev
+        lgs_bkgrnd(list)          : Laser Guide Star powfs.bkgrnd
+        lgs_nearecon(list)        : Laser Guide Star powfs.nearecon
+        tt_siglev(list)           : Tip-Tilt Star powfs.siglev
+        tt_bkgrnd(list)           : Tip-Tilt Star powfs.bkgrnd
+        tt_nearecon(list)         : Tip-Tilt Star powfs.nearecon
+        truth_siglev(list)        : LBWFS powfs.siglev
+        truth_bkgrnd(list)        : LBWFS powfs.bkgrnd
+        truth_nearecon(list)      : LBWFS powfs.nearecon
+        sides(list)               : Calculated dm.dx value
+        actuators(list)           : Associated actuator values
+    '''
+                         
+    lgs_flux_values, tt_flux_values, truth_flux_values, actuators, sides = paarti_mag_to_flux(act_start, 
+                                                                                              act_stop,
+                                                                                              act_step, 
+                                                                                              lgs_mag,
+                                                                                              tt_mag)
 
-    tt_siglev = []
-    tt_bkgrnd = []
-    tt_nearecon = []
+    lgs_siglev, lgs_bkgrnd, lgs_nearecon = zip(*[(round(lgs_parameter[1], 3),
+                                                  lgs_bkgrnd_value,
+                                                  round(lgs_parameter[2], 3))
+                                                 for lgs_parameter in lgs_flux_values])
 
-    truth_siglev = []
-    truth_bkgrnd = []
-    truth_nearecon = []                                
+    tt_siglev, tt_bkgrnd, tt_nearecon = zip(*[(round(tt_parameter[1], 3),
+                                                round(tt_parameter[3], 3),
+                                                round(tt_parameter[2], 3))
+                                               for tt_parameter in tt_flux_values])
+
+    truth_siglev, truth_bkgrnd, truth_nearecon = zip(*[(round(truth_parameter[1], 3),
+                                                        round(truth_parameter[3], 3),
+                                                        round(truth_parameter[2], 3))
+                                                       for truth_parameter in truth_flux_values])
+
+    return (list(lgs_siglev), list(lgs_bkgrnd), list(lgs_nearecon),
+            list(tt_siglev), list(tt_bkgrnd), list(tt_nearecon),
+            list(truth_siglev), list(truth_bkgrnd), list(truth_nearecon),
+            actuators, sides)
+
+
                                     
-    lgs, tt, truth, actuators, sides = paarti_mag_to_flux(act_start, act_stop,
-                                                act_step, lgs_mag,
-                                                tt_mag, lgs_bkgrnd_value=0.1,lgs_pixpsa=lgs_pixpsa, 
-                                        lgs_pixsize=lgs_pixsize, int_time=int_time)
-    for lgs_parameter in lgs:
-        _, sigma_theta, Np, Nb = lgs_parameter
-        lgs_nearecon.append(round(sigma_theta, 3))
-        lgs_siglev.append(round(Np, 3))
-        lgs_bkgrnd.append(lgs_bkgrnd_value)
 
-    for tt_parameter in tt:  
-        _, sigma_theta, Np, Nb = tt_parameter
-        tt_nearecon.append(round(sigma_theta, 3))
-        tt_siglev.append(round(Np, 3))
-        tt_bkgrnd.append(round(Nb, 3))
+def print_mag_to_flux(act_start, act_stop, act_step, 
+                                lgs_mag, tt_mag):
+    '''
+    Converts magnitude to flux for MAOS. Makes use of wrapper
+    package PAARTI to convert values. Ready for copy and paste into 
+    master file for MAOS runs. 
+    
+    Inputs:
+    -------
+        act_start(float)          : Least number of actuators
+        act_stop(float)           : Most number of actuators, exclusive
+        act_step(float)           : Steps between each calculation
+        lgs_mag(float)            : Magnitude of laser guide stars
+        tt_mag(float)             : Magnitude of tip-tilt guide stars
+    Outputs:
+    --------
+    Printed output for master level file (e.g. A_keck_mcao_lgs.conf)
+    '''
+    # Calculate the magnitude to flux parameters for LGS/TT/Truth
+    lgs_siglev, lgs_bkgrnd, lgs_nearecon, \
+    tt_siglev, tt_bkgrnd, tt_nearecon, \
+    truth_siglev, truth_bkgrnd, truth_nearecon, \
+    actuators, sides = calculate_magnitude_to_flux(act_start, 
+                                                   act_stop, 
+                                                   act_step, 
+                                                   lgs_mag, 
+                                                   tt_mag, )
 
-    for truth_parameter in truth:  
-        _, sigma_theta, Np, Nb = truth_parameter
-        truth_nearecon.append(round(sigma_theta, 3))
-        truth_siglev.append(round(Np, 3))
-        truth_bkgrnd.append(round(Nb, 3))
-
-    return lgs_siglev, lgs_bkgrnd, lgs_nearecon, tt_siglev, tt_bkgrnd, tt_nearecon, truth_siglev, truth_bkgrnd, truth_nearecon, actuators, sides
-
-
-                                    
-
-def print_magnitude_to_flux(act_start, act_stop, act_step, 
-                                lgs_mag, tt_mag, lgs_bkgrnd_value=0.1, lgs_pixpsa=25, 
-                                lgs_pixsize=1, int_time=1/1500):
-
-    lgs_siglev, lgs_bkgrnd, lgs_nearecon, tt_siglev, tt_bkgrnd, tt_nearecon, truth_siglev, truth_bkgrnd, truth_nearecon, actuators, sides = calculate_magnitude_to_flux(act_start, act_stop, act_step, lgs_mag, tt_mag, lgs_pixpsa=lgs_pixpsa, lgs_pixsize=lgs_pixsize, int_time=int_time)
-
-
+    # Print header
     print('--------------------')
-    print('MCAO Flux Parameters:')
+    print('VisMCAO Magnitude-to-Flux Parameters:')
     print('--------------------')
     print('')
-    print('####')
-    print(f'#{lgs_mag}mag')
-    print('####')
 
+    print(f'####\n#{lgs_mag}mag LGS ({tt_mag}mag TT)\n####')
+
+    # Iterate over actuators and print parameters
     for i, actuator in enumerate(actuators):
         print('#Actuator Count:', actuator)
         print('#dm.dx = [', sides[i], '.168 .168 ]')
