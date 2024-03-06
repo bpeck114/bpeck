@@ -11,7 +11,7 @@ from paarti.utils import maos_utils
 
 """
 Constants for VisAO (Last Updated: 3/6/2024)
-Refer to PAARTI for further documentation
+Refer to PAARTI for further documentation.
 """
 #LGS WFS PAARTI Constants
 LGS_WFS               = 'LGSWFS-OCAM2K'             #Wave Front Sensor
