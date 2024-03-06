@@ -10,7 +10,7 @@ from scipy.interpolate import interp1d
 from paarti.utils import maos_utils
 
 """
-Constants for VisAO (Last Updated: 3/3/2024)
+Constants for VisAO (Last Updated: 3/6/2024)
 Refer to PAARTI for further documentation
 """
 #LGS WFS PAARTI Constants
@@ -35,7 +35,7 @@ LBWFS_WFS             = 'LBWFS'
 LBWFS_INTEGRATION     = 1000000 / 1500 #Needs to happen infrequently
 
 #Output directory for psf metrics and WFE
-OUTPUT_DIRECTORY = '/u/bpeck/work/mcao/experiments/act_study/vismcao/A_keck_mcao_lgs'
+OUTPUT_DIRECTORY = '/u/bpeck/work/mcao/experiments/act_study/vismcao/A_keck_mcao_lgs/'
 
 
 def calc_side(act_start, act_stop, act_step, sigfigs=3):
