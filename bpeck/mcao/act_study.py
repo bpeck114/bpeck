@@ -20,7 +20,7 @@ LGS_PIXEL_SIZE        = 1                           #Plate Scale (w QE)
 LGS_THETA_BETA        = 1.5 *(math.pi/180)/(60*60)  #Spot Size Diameter
 LGS_BAND              = 'R'                         #Filter
 LGS_SIGMA_E           = 0.5                         #Read Noise
-LGS_PIXPERSA          = 100   #(DEAFULT 25!)        #Pixels Per Subaperture
+LGS_PIXPERSA          = 25                          #Pixels Per Subaperture
 LGS_INTEGRATION       = 1/1500                      #Integration Time
 
 #LGS WFS MAOS Constants 
@@ -212,7 +212,7 @@ def tt_flux_params(act_start, act_stop, act_step, lgs_mag, tt_mag):
         tt_bkgrnd(list)           : Tip-Tilt Star powfs.bkgrnd
         tt_nearecon(list)         : Tip-Tilt Star powfs.nearecon
     '''
-    tt_flux_values = lgs_mag_to_flux(act_start, act_stop, act_step, lgs_mag, tt_mag)
+    tt_flux_values = tt_mag_to_flux(act_start, act_stop, act_step, lgs_mag, tt_mag)
     tt_siglev, tt_bkgrnd, tt_nearecon = zip(*[(round(tt_parameter[2], 3),
                                                 round(tt_parameter[3], 3),
                                                 round(tt_parameter[1], 3))
@@ -267,7 +267,9 @@ def print_mag_to_flux(act_start, act_stop, act_step,
                                     
     # Calculate the magnitude to flux parameters for LGS/TT/Truth
     lgs_siglev, lgs_bkgrnd, lgs_nearecon = lgs_flux_params(act_start, act_stop, act_step, lgs_mag, tt_mag)
+    print(lgs_siglev)
     tt_siglev, tt_bkgrnd, tt_nearecon = tt_flux_params(act_start, act_stop, act_step, lgs_mag, tt_mag)
+    print(tt_siglev)
     truth_siglev, truth_bkgrnd, truth_nearecon = truth_flux_params(act_start, act_stop, act_step, lgs_mag, tt_mag)
     actuators, sides = calc_side(act_start, act_stop, act_step, sigfigs=3)
 
@@ -280,8 +282,7 @@ def print_mag_to_flux(act_start, act_stop, act_step,
     print(f'####\n#{lgs_mag}mag LGS ({tt_mag}mag TT)\n####')
 
     # Iterate over actuators and print parameters
-    #NEED TO DEBUG
-    for i, side in enumerate(sides):
+    for i, (actuator, side) in enumerate(zip(sides, actuators)):
         print('#Actuator Count:', actuator)
         print('#dm.dx = [', sides[i], '.168 .168 ]')
         print('#powfs.siglev = [',lgs_siglev[i], tt_siglev[i], truth_siglev[i], ']')
