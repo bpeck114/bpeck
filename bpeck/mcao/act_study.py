@@ -8,6 +8,7 @@ import math
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from paarti.utils import maos_utils
+import readbin
 
 """
 Constants for VisAO (Last Updated: 3/6/2024)
@@ -32,7 +33,7 @@ TT_INTEGRATION        = 1/1500
 
 #LBWFS Constants
 LBWFS_WFS             = 'LBWFS'
-LBWFS_INTEGRATION     = 1000000 / 1500 #Needs to happen infrequently
+LBWFS_INTEGRATION     = 1 / 1500 #Needs to happen infrequently
 
 #Output directory for psf metrics and WFE
 OUTPUT_DIRECTORY = '/u/bpeck/work/mcao/experiments/act_study/vismcao/A_keck_mcao_lgs/'
@@ -592,3 +593,17 @@ def plot_wfe(act_start, act_stop, act_step, magnitudes, directory_results_path='
     axis[1].legend(bbox_to_anchor=(0.5, -0.15), loc="upper center", ncol=4)
     plt.savefig('act_study_wfe.png')
     plt.show()
+
+def plot_wfe_metrics(directory='./', seed=1):
+    #Field-dependent results 
+    results_xx_file = f'{directory}/extra/Resp_{seed}.bin'
+    results_xx = readbin.readbin(results_xx_file)
+
+    # Closed-loop WFE (nm): Piston removed, TT only, Piston+TT removed
+    clos_xx_mean_nm = results_xx[3][0] * 1.0e9
+
+    
+
+
+
+
