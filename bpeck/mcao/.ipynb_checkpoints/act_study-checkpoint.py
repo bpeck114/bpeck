@@ -8,9 +8,10 @@ import math
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from paarti.utils import maos_utils
+import readbin
 
 """
-Constants for VisAO (Last Updated: 3/6/2024)
+Constants for VisAO (Last Updated: 4/20/2024)
 Refer to PAARTI for further documentation.
 """
 #LGS WFS PAARTI Constants
@@ -32,7 +33,7 @@ TT_INTEGRATION        = 1/1500
 
 #LBWFS Constants
 LBWFS_WFS             = 'LBWFS'
-LBWFS_INTEGRATION     = 1000000 / 1500 #Needs to happen infrequently
+LBWFS_INTEGRATION     = 1/1500 #Needs to happen infrequently
 
 #Output directory for psf metrics and WFE
 OUTPUT_DIRECTORY = '/u/bpeck/work/mcao/experiments/act_study/vismcao/A_keck_mcao_lgs/'
@@ -91,6 +92,8 @@ def print_calc_side(act_start, act_stop, act_step, sigfigs=3):
     # Print formatting
     for side_value, actuator_value in zip(sides, actuators):
         print(f'{actuator_value:11.0f} {side_value:11.3f} \n')
+
+    print(sides)
 
     return sides, actuators
 
@@ -284,7 +287,7 @@ def print_mag_to_flux(act_start, act_stop, act_step,
     # Iterate over actuators and print parameters
     for i, (actuator, side) in enumerate(zip(sides, actuators)):
         print('#Actuator Count:', actuator)
-        print('#dm.dx = [', sides[i], '.168 .168 ]')
+        print('#dm.dx = [', actuators[i], '.168 .168 ]')
         print('#powfs.siglev = [',lgs_siglev[i], tt_siglev[i], truth_siglev[i], ']')
         print('#powfs.bkgrnd = [', lgs_bkgrnd[i], tt_bkgrnd[i], truth_bkgrnd[i], ']')
         print('#powfs.nearecon = [', lgs_nearecon[i], tt_nearecon[i], truth_nearecon[i], ']')
@@ -592,3 +595,75 @@ def plot_wfe(act_start, act_stop, act_step, magnitudes, directory_results_path='
     axis[1].legend(bbox_to_anchor=(0.5, -0.15), loc="upper center", ncol=4)
     plt.savefig('act_study_wfe.png')
     plt.show()
+
+def get_wfe_metrics(directory='./', seed=10):
+    """
+    Function to print various wave-front error (WFE) metrics 
+    to terminal.
+
+    Inputs:
+    ------------
+    directory      : string, default is current directory
+        Path to directory where simulation results live
+
+    seed           : int, default=10
+        Seed with which simulation was run
+
+    Outputs:
+    ------------
+    open_mean_nm   : array, len=3, dtype=float
+        Array containing WFE metrics for open-loop MAOS results
+        averaged over all the PSF evalution locations.
+
+    closed_mean_nm : array, len=3, dtype=float
+        Array containing WFE metrics for closed-loop MAOS results
+        averaged over all the PSF evalution locations.
+
+    open_xx_mean_nm   : array, shape=[N,3], dtype=float
+        Array containing WFE metrics for open-loop MAOS results
+        evaluated at each PSF location. Shape is [N, 3] where
+        N is the number of PSF locations. Will return None if
+        only a single PSF location. 
+
+    closed_xx_mean_nm : array, shape=[N,3], dtype=float
+        Array containing WFE metrics for closed-loop MAOS results
+        evaluated at each PSF location. Shape is [N, 3] where
+        N is the number of PSF locations. Will return None if
+        only a single PSF location.
+    
+    """
+    # Field averaged results
+    results_file = f'{directory}Res_{seed}.bin'
+    results = readbin.readbin(results_file)
+    #print("Looking in directory:", directory)
+
+    # Open-loop WFE (nm): Piston removed, TT only, Piston+TT removed
+    open_mean_nm = np.sqrt(results[0].mean(axis=0)) * 1.0e9
+
+    # Closed-loop WFE (nm): Piston removed, TT only, Piston+TT removed
+    clos_mean_nm = np.sqrt(results[2].mean(axis=0)) * 1.0e9
+
+    # Field-dependent resutls
+    # Determine if we have a field-dependent WFE results file in extra/
+    results_xx_file = f'{directory}/extra/Resp_{seed}.bin'
+    if os.path.exists(results_xx_file):
+        results_xx = readbin.readbin(results_xx_file)
+
+        open_xx_mean_nm = np.zeros((results_xx[2].shape[0], 3), dtype=float)
+        clos_xx_mean_nm = np.zeros((results_xx[3].shape[0], 3), dtype=float)
+
+        # Loop through PSF positions and get RMS WFE in nm
+        for xx in range(open_xx_mean_nm.shape[0]):
+            
+            # Open-loop WFE (nm): Piston removed, TT only, Piston+TT removed
+            open_xx_mean_nm[xx] = np.sqrt(results_xx[2][xx].mean(axis=0)) * 1.0e9
+            
+            # Closed-loop WFE (nm): Piston removed, TT only, Piston+TT removed
+            clos_xx_mean_nm[xx] = np.sqrt(results_xx[3][xx].mean(axis=0)) * 1.0e9
+
+    else:
+        results_xx = None
+        open_xx_mean_nm = None
+        clos_xx_mean_nm = None
+
+    return open_mean_nm, clos_mean_nm, open_xx_mean_nm, clos_xx_mean_nm

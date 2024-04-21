@@ -9,6 +9,45 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from paarti.utils import maos_utils
 
+def calculate_radius(n_lgs, radius):
+    # Initialize lists to store x and y coordinates
+    x = []
+    y = []
+
+    # Generate evenly spaced angles around the circle
+    angles = np.linspace(0, 2*np.pi, n_lgs, endpoint=False)
+
+    # Calculate x and y coordinates for each angle
+    for angle in angles:
+        x_calc = np.round(radius * np.cos(angle), 2)
+        x.append(x_calc)
+
+        y_calc = np.round(radius * np.sin(angle), 2)
+        y.append(y_calc)
+
+    # Create a new figure and set the limits for the plot
+    plt.figure(figsize=(2,2))
+    plt.xlim(-60,60)
+    plt.ylim(-60,60)
+
+    # Plot the origin and axes
+    plt.scatter(0,0)
+    plt.plot([-60,60], [0,0], color = 'grey', linewidth=0.5)
+    plt.plot([0,0], [-60,60], color = 'grey', linewidth=0.5)
+
+    # Plot the calculated points
+    plt.scatter(x, y)  
+    
+    # Add a circle to the plot
+    circle = plt.Circle((0, 0), radius, color='b', fill=False)
+    plt.gca().add_patch(circle)
+
+    # Print the calculated x and y coordinates for MAOS parameters
+    print(f"#wfs.thetax = {x}")
+    print(f"#wfs.thetay = {y}")
+    
+    return x, y
+
 
 def psf_metrics_x0y0(directory='./', oversamp=3, seed=10, cut_radius=20):
     """
